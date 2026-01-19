@@ -1,4 +1,4 @@
-streamlit
+streamlit>=1.37.0
 openai
 pandas
 numpy
@@ -8,3 +8,5 @@ matplotlib
 wordcloud
 openpyxl
 Sastrawi
+networkx
+scipy
