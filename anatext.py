@@ -29,7 +29,7 @@ default_stopwords_id = [
     'secara', 'antara', 'sebuah', 'suatu', 'begitu', 'lagi', 'masih', 'banyak', 'semua', 'setiap', 'serta', 
     'hal', 'bila', 'pun', 'lalu', 'kemudian', 'yakni', 'yaitu', 'apabila', 'ketika', 'baik', 'paling', 
     'demi', 'hingga', 'sampai', 'tanpa', 'belum', 'harus', 'sedang', 'maupun', 'selain', 'melalui', 
-    'sendiri', 'beberapa', 'apa', 'siapa', 'mana', 'kapan', 'bagaimana', 'mengapa', 'kenapa'
+    'sendiri', 'beberapa', 'apa', 'siapa', 'bagi','bagai','jadi','mana', 'kapan', 'bagaimana', 'mengapa', 'kenapa'
 ]
 
 default_stopwords_en = [
@@ -599,4 +599,5 @@ if st.session_state.analysis_done and st.session_state.data is not None:
 
     st.divider()
     st.download_button("📥 Unduh CSV", df.to_csv(index=False).encode('utf-8'), "analisis_anatext.csv", "text/csv")
+
 
