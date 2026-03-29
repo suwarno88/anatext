@@ -920,7 +920,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown(
-        f'<div class="footer-text">Developed by <b>Suwarno</b><br>Powered by <b>GPT-4o</b> & <b>GPT-4o-mini</b><br>v{APP_VERSION}</div>',
+        f'<div class="footer-text">Developed by <b>Suwarno</b><br>Powered by <b>GPT-4.1</b> & <b>GPT-4.1-nano</b><br>v{APP_VERSION}</div>',
         unsafe_allow_html=True
     )
 
