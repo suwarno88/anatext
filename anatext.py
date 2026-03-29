@@ -17,7 +17,7 @@ from collections import Counter
 from itertools import combinations
 from datetime import datetime
 
-APP_VERSION = "2.1.0-enhanced"
+APP_VERSION = "2.2.0-enhanced"
 
 # ============================================================
 #                  KONFIGURASI HALAMAN
@@ -1239,6 +1239,80 @@ if st.session_state.analysis_done and st.session_state.data is not None:
             "Keywords": st.column_config.TextColumn("Kata Kunci (Top 10)", width="large"),
             "Jumlah_Dokumen": st.column_config.NumberColumn("Jumlah Dok.", width="small")
         })
+
+        # Word Cloud per Topik
+        st.markdown("---")
+        st.markdown("#### ☁️ Word Cloud per Topik")
+        st.caption("Visualisasi kata-kata dominan untuk setiap topik/klaster yang teridentifikasi.")
+
+        wc_bg = 'black' if theme_mode == 'Dark' else 'white'
+        topic_names_list = df['Topik'].unique().tolist()
+        num_topics_wc = len(topic_names_list)
+
+        if num_topics_wc > 0:
+            # Tentukan grid layout: maks 3 kolom per baris
+            cols_per_row = min(3, num_topics_wc)
+            rows_needed = (num_topics_wc + cols_per_row - 1) // cols_per_row
+
+            topic_color_map = {}
+            for idx, detail in enumerate(st.session_state.topic_details):
+                topic_color_map[detail['Topik']] = TOPIC_COLORS[idx % len(TOPIC_COLORS)]
+
+            for row_idx in range(rows_needed):
+                cols_wc = st.columns(cols_per_row)
+                for col_idx in range(cols_per_row):
+                    topic_idx = row_idx * cols_per_row + col_idx
+                    if topic_idx >= num_topics_wc:
+                        break
+                    t_name = topic_names_list[topic_idx]
+                    t_color = topic_color_map.get(t_name, '#4facfe')
+                    topic_texts = df[df['Topik'] == t_name]['Teks_Clean']
+                    combined_text = " ".join(topic_texts.tolist())
+
+                    with cols_wc[col_idx]:
+                        if combined_text.strip():
+                            try:
+                                def make_color_func(base_color):
+                                    """Membuat fungsi warna gradasi dari warna dasar topik."""
+                                    r = int(base_color[1:3], 16)
+                                    g = int(base_color[3:5], 16)
+                                    b = int(base_color[5:7], 16)
+                                    def color_func(word, font_size, position, orientation, random_state=None, **kwargs):
+                                        # Variasi kecerahan berdasarkan font_size
+                                        factor = max(0.4, min(font_size / 80, 1.0))
+                                        ri = int(r * factor + (255 - r) * (1 - factor) * 0.3)
+                                        gi = int(g * factor + (255 - g) * (1 - factor) * 0.3)
+                                        bi = int(b * factor + (255 - b) * (1 - factor) * 0.3)
+                                        return f"rgb({min(ri,255)},{min(gi,255)},{min(bi,255)})"
+                                    return color_func
+
+                                wc_topic = WordCloud(
+                                    width=400, height=280,
+                                    background_color=wc_bg,
+                                    color_func=make_color_func(t_color),
+                                    max_words=50,
+                                    contour_width=0,
+                                    prefer_horizontal=0.7,
+                                    min_font_size=8
+                                ).generate(combined_text)
+
+                                fig_wc_t, ax_wc_t = plt.subplots(figsize=(5, 3.5), facecolor=wc_bg)
+                                ax_wc_t.imshow(wc_topic, interpolation='bilinear')
+                                ax_wc_t.axis("off")
+                                title_color = 'white' if theme_mode == 'Dark' else '#1a1a2e'
+                                doc_count = len(topic_texts)
+                                ax_wc_t.set_title(
+                                    f"{t_name}\n({doc_count} dokumen)",
+                                    fontsize=10, fontweight='bold', color=title_color,
+                                    pad=8
+                                )
+                                plt.tight_layout()
+                                st.pyplot(fig_wc_t)
+                                plt.close(fig_wc_t)
+                            except ValueError:
+                                st.info(f"Data tidak cukup untuk **{t_name}**")
+                        else:
+                            st.info(f"Tidak ada teks untuk **{t_name}**")
 
     # ========================
     # TAB 4: CROSS ANALYSIS (NEW)
