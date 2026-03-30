@@ -17,7 +17,7 @@ from collections import Counter
 from itertools import combinations
 from datetime import datetime
 
-APP_VERSION = "2.2.0-enhanced"
+APP_VERSION = "2.3.0-enhanced"
 
 # ============================================================
 #                  KONFIGURASI HALAMAN
@@ -920,7 +920,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown(
-        f'<div class="footer-text">Developed by <b>Suwarno</b><br>Powered by <b>GPT-4.1</b> & <b>GPT-4.1-nano</b><br>v{APP_VERSION}</div>',
+        f'<div class="footer-text">Developed by <b>Suwarno</b><br>Powered by <b>GPT-4o</b> & <b>GPT-4o-mini</b><br>v{APP_VERSION}</div>',
         unsafe_allow_html=True
     )
 
@@ -1120,7 +1120,7 @@ if st.session_state.analysis_done and st.session_state.data is not None:
     st.write("")
 
     # --- TABS ---
-    t1, t2, t3, t4, t5, t6, t7, t8, t9 = st.tabs([
+    t1, t2, t3, t4, t5, t6, t7, t8, t9, t10 = st.tabs([
         "📝 Ringkasan AI",
         "🎭 Sentimen",
         "📂 Topik",
@@ -1129,7 +1129,8 @@ if st.session_state.analysis_done and st.session_state.data is not None:
         "🔗 N-Gram",
         "👤 Entitas (NER)",
         "🌐 Network",
-        "🕸️ Jaringan Entitas"
+        "🕸️ Jaringan Entitas",
+        "📊 Kata Kunci/Dok"
     ])
 
     # ========================
@@ -1648,6 +1649,134 @@ if st.session_state.analysis_done and st.session_state.data is not None:
                     st.info("Tidak ada ko-kemunculan entitas yang terdeteksi dalam dokumen.")
         else:
             st.error("Hasil NER belum tersedia. Jalankan analisis terlebih dahulu.")
+
+    # ========================
+    # TAB 10: KATA KUNCI PER DOKUMEN
+    # ========================
+    with t10:
+        st.markdown("### 📊 10 Kata Kunci Teratas per Dokumen")
+        st.caption("Menampilkan 10 kata kunci dengan skor TF-IDF tertinggi di setiap dokumen.")
+
+        if hasattr(st.session_state, 'tfidf_matrix') and hasattr(st.session_state, 'vectorizer'):
+            tfidf_mat = st.session_state.tfidf_matrix
+            feature_names = st.session_state.vectorizer.get_feature_names_out()
+            total_docs = len(df)
+
+            # --- Mode Pilihan ---
+            doc_view_mode = st.radio(
+                "Mode tampilan:",
+                ["📄 Pilih Dokumen", "📑 Semua Dokumen (Grid)"],
+                horizontal=True,
+                key="doc_kw_mode"
+            )
+
+            if doc_view_mode == "📄 Pilih Dokumen":
+                # Preview teks untuk membantu pemilihan
+                doc_options = []
+                for i in range(total_docs):
+                    preview = df['Teks_Asli'].iloc[i]
+                    preview_short = (preview[:80] + "...") if len(preview) > 80 else preview
+                    doc_options.append(f"Dokumen {i + 1}: {preview_short}")
+
+                selected_doc = st.selectbox(
+                    "Pilih dokumen:", doc_options, key="doc_kw_select"
+                )
+                doc_idx = doc_options.index(selected_doc)
+
+                # Ambil top 10 kata kunci untuk dokumen terpilih
+                row = tfidf_mat[doc_idx].toarray().flatten()
+                top_indices = row.argsort()[-10:][::-1]
+                top_words = [(feature_names[i], round(row[i], 4)) for i in top_indices if row[i] > 0]
+
+                if top_words:
+                    # Info dokumen
+                    st.markdown(f"**Dokumen #{doc_idx + 1}** — Topik: `{df['Topik'].iloc[doc_idx]}` | Sentimen: `{df['Sentimen'].iloc[doc_idx]}`")
+                    with st.expander("📖 Lihat Teks Lengkap", expanded=False):
+                        st.write(df['Teks_Asli'].iloc[doc_idx])
+
+                    df_doc_kw = pd.DataFrame(top_words, columns=["Kata Kunci", "Skor TF-IDF"])
+                    fig_doc = px.bar(
+                        df_doc_kw, x="Skor TF-IDF", y="Kata Kunci", orientation='h',
+                        template=plotly_template, color="Skor TF-IDF",
+                        color_continuous_scale="Teal",
+                        text=df_doc_kw['Skor TF-IDF'].apply(lambda x: f"{x:.4f}")
+                    )
+                    fig_doc.update_traces(textposition='outside')
+                    fig_doc.update_layout(
+                        yaxis={'categoryorder': 'total ascending'},
+                        height=420,
+                        title=f"Top 10 Kata Kunci — Dokumen #{doc_idx + 1}"
+                    )
+                    st.plotly_chart(fig_doc, use_container_width=True)
+
+                    # Tabel detail
+                    df_doc_kw.index = range(1, len(df_doc_kw) + 1)
+                    df_doc_kw.index.name = "Peringkat"
+                    st.dataframe(df_doc_kw, use_container_width=True)
+                else:
+                    st.warning("Dokumen ini tidak memiliki kata kunci yang terdeteksi setelah preprocessing.")
+
+            else:
+                # --- Grid View: Semua Dokumen ---
+                st.info(f"Menampilkan diagram batang kata kunci untuk **{total_docs} dokumen**. Scroll ke bawah untuk melihat semua.")
+
+                # Batasi jika terlalu banyak dokumen
+                max_grid_docs = 30
+                if total_docs > max_grid_docs:
+                    st.warning(f"Jumlah dokumen ({total_docs}) melebihi batas tampilan grid ({max_grid_docs}). Hanya {max_grid_docs} dokumen pertama yang ditampilkan. Gunakan mode '📄 Pilih Dokumen' untuk melihat dokumen lainnya.")
+                    display_count = max_grid_docs
+                else:
+                    display_count = total_docs
+
+                cols_per_row_doc = 2
+                rows_doc = (display_count + cols_per_row_doc - 1) // cols_per_row_doc
+
+                for row_i in range(rows_doc):
+                    cols_doc = st.columns(cols_per_row_doc)
+                    for col_i in range(cols_per_row_doc):
+                        d_idx = row_i * cols_per_row_doc + col_i
+                        if d_idx >= display_count:
+                            break
+
+                        with cols_doc[col_i]:
+                            row_data = tfidf_mat[d_idx].toarray().flatten()
+                            top_idx = row_data.argsort()[-10:][::-1]
+                            top_kw = [(feature_names[j], round(row_data[j], 4)) for j in top_idx if row_data[j] > 0]
+
+                            if top_kw:
+                                df_kw_grid = pd.DataFrame(top_kw, columns=["Kata", "TF-IDF"])
+
+                                # Warna berdasarkan sentimen
+                                sent = df['Sentimen'].iloc[d_idx]
+                                bar_color = SENTIMENT_COLORS.get(sent, '#4facfe')
+
+                                fig_grid = px.bar(
+                                    df_kw_grid, x="TF-IDF", y="Kata", orientation='h',
+                                    template=plotly_template,
+                                    text=df_kw_grid['TF-IDF'].apply(lambda x: f"{x:.3f}")
+                                )
+                                fig_grid.update_traces(
+                                    textposition='outside',
+                                    marker_color=bar_color
+                                )
+
+                                preview_t = df['Teks_Asli'].iloc[d_idx]
+                                preview_short_t = (preview_t[:50] + "...") if len(preview_t) > 50 else preview_t
+
+                                fig_grid.update_layout(
+                                    yaxis={'categoryorder': 'total ascending'},
+                                    height=320,
+                                    title=dict(
+                                        text=f"Dok #{d_idx + 1} [{sent}]<br><sub>{preview_short_t}</sub>",
+                                        font=dict(size=11)
+                                    ),
+                                    margin=dict(t=60, b=10, l=10, r=10)
+                                )
+                                st.plotly_chart(fig_grid, use_container_width=True)
+                            else:
+                                st.info(f"Dok #{d_idx + 1}: Tidak ada kata kunci.")
+        else:
+            st.warning("Data TF-IDF belum tersedia. Jalankan analisis terlebih dahulu.")
 
     # ========================
     # EXPORT SECTION
