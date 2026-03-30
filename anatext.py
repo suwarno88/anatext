@@ -17,7 +17,7 @@ from collections import Counter
 from itertools import combinations
 from datetime import datetime
 
-APP_VERSION = "2.3.1-enhanced"
+APP_VERSION = "2.4.0-enhanced"
 
 # ============================================================
 #                  KONFIGURASI HALAMAN
@@ -84,6 +84,8 @@ if 'summary_cache' not in st.session_state:
     st.session_state.summary_cache = None
 if 'entity_network' not in st.session_state:
     st.session_state.entity_network = None
+if 'tab_insights' not in st.session_state:
+    st.session_state.tab_insights = {}
 
 # ============================================================
 #                  CSS & THEME ENGINE
@@ -421,7 +423,7 @@ def get_ngrams(text_series, n=2, top_k=10):
 
 # 4. NER Analysis (AI)
 def get_ner_ai(client, model, text_full):
-    """Mengekstrak Named Entities menggunakan GPT-4o."""
+    """Mengekstrak Named Entities menggunakan GPT-4.1."""
     try:
         text_sample = text_full[:15000]
         prompt = f"""
@@ -573,6 +575,171 @@ Gunakan **bold** untuk poin penting. Pastikan setiap klaim didukung oleh data ku
         return response.choices[0].message.content
     except Exception as e:
         return f"❌ Gagal menghasilkan ringkasan: {str(e)}"
+
+
+# 5b. Tab-Specific AI Insight Generator
+def generate_tab_insight(client, model, tab_key, context_data):
+    """Menghasilkan ringkasan AI spesifik untuk setiap tab analisis."""
+
+    tab_prompts = {
+        "sentimen": {
+            "title": "Analisis Sentimen",
+            "instruction": """Analisis distribusi sentimen secara mendalam. Jelaskan:
+1. Sentimen mana yang dominan dan mengapa berdasarkan konteks data
+2. Proporsi dan rasio antar sentimen (positif vs negatif vs netral)
+3. Apakah distribusi sentimen ini sehat atau mengkhawatirkan
+4. Faktor-faktor yang mungkin mempengaruhi dominasi sentimen tertentu
+5. Implikasi dan rekomendasi berdasarkan pola sentimen yang ditemukan"""
+        },
+        "topik": {
+            "title": "Analisis Tematik (Topik)",
+            "instruction": """Analisis topik-topik yang teridentifikasi secara mendalam. Jelaskan:
+1. Makna dan konteks setiap topik berdasarkan kata kunci pembentuknya
+2. Topik mana yang paling dominan/krusial dari segi jumlah dokumen
+3. Hubungan dan keterkaitan antar topik
+4. Apakah topik-topik saling mendukung atau bertentangan
+5. Implikasi tematik terhadap narasi keseluruhan data"""
+        },
+        "cross": {
+            "title": "Cross-Analysis: Sentimen × Topik",
+            "instruction": """Analisis hubungan silang antara sentimen dan topik. Jelaskan:
+1. Topik mana yang paling positif vs paling negatif
+2. Adakah topik kontroversial yang sentimennya terpolarisasi
+3. Topik mana yang perlu perhatian dan prioritas penanganan
+4. Mengapa topik tertentu mendapat respons sentimen yang berbeda
+5. Pola dan anomali dalam distribusi sentimen per topik"""
+        },
+        "katakunci": {
+            "title": "Analisis Kata Kunci",
+            "instruction": """Analisis kata kunci dan pola frekuensi kata. Jelaskan:
+1. Kata-kata dengan skor TF-IDF tertinggi dan signifikansinya
+2. Perbedaan antara kata frekuensi tinggi vs kata TF-IDF tinggi
+3. Apa yang bisa disimpulkan dari pola penggunaan kata
+4. Kosakata spesifik yang menunjukkan kecenderungan tertentu
+5. Hubungan kata kunci dominan dengan topik dan sentimen"""
+        },
+        "ngram": {
+            "title": "Analisis N-Gram (Frasa)",
+            "instruction": """Analisis frasa (N-Gram) yang sering muncul. Jelaskan:
+1. Makna dan konteks dari bigram dan trigram teratas
+2. Pola frasa apa yang muncul secara konsisten
+3. Apakah frasa-frasa tersebut menunjukkan narasi atau opini tertentu
+4. Perbandingan antara bigram, trigram, dan fourgram
+5. Hubungan frasa dominan dengan topik dan sentimen yang ditemukan"""
+        },
+        "ner": {
+            "title": "Analisis Entitas (NER)",
+            "instruction": """Analisis entitas yang terdeteksi. Jelaskan:
+1. Siapa saja tokoh/orang kunci dan relevansinya dalam konteks data
+2. Organisasi/lembaga yang muncul dan perannya
+3. Lokasi yang terdeteksi dan hubungannya dengan narasi data
+4. Keterkaitan antar entitas (person-organization-location)
+5. Implikasi kehadiran entitas-entitas tersebut terhadap temuan analisis"""
+        },
+        "network": {
+            "title": "Text Network Analysis",
+            "instruction": """Analisis jaringan teks (hubungan topik-kata kunci). Jelaskan:
+1. Struktur jaringan: topik mana yang paling terhubung dengan kata kunci beragam
+2. Apakah ada kata kunci yang menjembatani beberapa topik sekaligus
+3. Kepadatan dan pola konektivitas jaringan
+4. Topik mana yang paling terisolasi vs paling terintegrasi
+5. Implikasi struktur jaringan terhadap koherensi tematik data"""
+        },
+        "entity_network": {
+            "title": "Jaringan Ko-kemunculan Entitas",
+            "instruction": """Analisis jaringan ko-kemunculan entitas. Jelaskan:
+1. Entitas mana yang paling sentral (paling banyak terhubung)
+2. Pasangan entitas yang paling sering muncul bersama dan maknanya
+3. Pola hubungan antar tipe entitas (Person-Organization-Location)
+4. Kepadatan jaringan dan apa artinya bagi data
+5. Insight strategis dari pola ko-kemunculan entitas"""
+        },
+        "doc_keywords": {
+            "title": "Analisis Kata Kunci per Dokumen",
+            "instruction": """Analisis pola kata kunci di level dokumen individual. Jelaskan:
+1. Apakah kata kunci antar dokumen bervariasi atau cenderung seragam
+2. Perbandingan pola TF-IDF vs frekuensi mentah (Raw Count)
+3. Dokumen mana yang memiliki kata kunci paling unik/berbeda
+4. Hubungan antara kata kunci dokumen dengan topik klasternya
+5. Insight mengenai keragaman konten antar dokumen"""
+        },
+        "linguistik": {
+            "title": "Pola Linguistik",
+            "instruction": """Analisis pola linguistik keseluruhan data. Jelaskan:
+1. Interpretasi kata-kata dominan dan frasa paling sering muncul
+2. Pola bahasa apa yang muncul secara konsisten
+3. Kosakata spesifik yang menunjukkan kecenderungan tertentu
+4. Gaya bahasa dan register yang digunakan dalam corpus
+5. Hubungan temuan linguistik dengan topik dan sentimen"""
+        },
+        "kesimpulan": {
+            "title": "Kesimpulan & Rekomendasi Strategis",
+            "instruction": """Tuliskan kesimpulan komprehensif dan rekomendasi strategis. Jelaskan:
+1. 3-5 poin kesimpulan kunci yang merangkum seluruh temuan
+2. 3-5 rekomendasi aksi konkret dan spesifik berdasarkan data
+3. Prioritas tindakan dari yang paling mendesak
+4. Justifikasi berbasis data untuk setiap rekomendasi
+5. Potensi risiko jika temuan-temuan ini tidak ditindaklanjuti"""
+        }
+    }
+
+    tab_info = tab_prompts.get(tab_key, {})
+    title = tab_info.get("title", "Analisis")
+    instruction = tab_info.get("instruction", "Berikan analisis mendalam.")
+
+    prompt = f"""Anda adalah **Senior Data Analyst** berpengalaman di bidang Text Mining & NLP.
+Berikan ringkasan dan analisis mendalam untuk bagian **{title}** berdasarkan data berikut.
+
+═══════════════ DATA KONTEKS ═══════════════
+{context_data}
+
+═══════════════ INSTRUKSI ═══════════════
+{instruction}
+
+ATURAN:
+- Tulis dalam bahasa Indonesia yang profesional dan data-driven
+- Panjang: 200-300 kata, padat dan elaboratif
+- Gunakan **bold** untuk poin penting
+- Setiap klaim HARUS didukung oleh data kuantitatif yang tersedia
+- Berikan insight yang actionable, bukan sekadar deskripsi
+"""
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": (
+                    "Anda adalah konsultan data analytics senior. "
+                    "Tulis analisis yang mendalam, terstruktur, dan actionable. "
+                    "Selalu kaitkan temuan dengan data kuantitatif yang diberikan."
+                )},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.4,
+            max_tokens=2000
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"❌ Gagal menghasilkan ringkasan: {str(e)}"
+
+
+def render_tab_insight_ui(client, model, tab_key, context_data, label=""):
+    """Render UI tombol dan hasil ringkasan AI di setiap tab."""
+    st.markdown("---")
+    insight_label = label or tab_key.replace("_", " ").title()
+
+    if tab_key in st.session_state.tab_insights:
+        st.markdown(f"#### 🤖 Ringkasan AI: {insight_label}")
+        st.markdown(st.session_state.tab_insights[tab_key])
+        if st.button(f"🔄 Regenerasi Ringkasan", key=f"regen_{tab_key}"):
+            del st.session_state.tab_insights[tab_key]
+            st.rerun()
+    else:
+        if st.button(f"✨ Generate Ringkasan AI: {insight_label}", key=f"gen_{tab_key}", type="primary"):
+            with st.spinner(f"🤖 AI sedang menganalisis {insight_label}..."):
+                result = generate_tab_insight(client, model, tab_key, context_data)
+                st.session_state.tab_insights[tab_key] = result
+                st.rerun()
 
 
 # 6. Network Graph (Enhanced with Plotly for interactivity)
@@ -920,7 +1087,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown(
-        f'<div class="footer-text">Developed by <b>Suwarno</b><br>Powered by <b>GPT-4o</b> & <b>GPT-4o-mini</b><br>v{APP_VERSION}</div>',
+        f'<div class="footer-text">Developed by <b>Suwarno</b><br>Powered by <b>GPT-4.1</b> & <b>GPT-4.1-mini</b><br>v{APP_VERSION}</div>',
         unsafe_allow_html=True
     )
 
@@ -935,8 +1102,8 @@ try:
 except Exception:
     api_key = ""
 client = OpenAI(api_key=api_key) if api_key else None
-MODEL_FAST = "gpt-4o-mini"   # Sentimen, Topik Naming, NER (cepat & hemat)
-MODEL_SMART = "gpt-4o"       # Summary Komprehensif (mendalam & detail)
+MODEL_FAST = "gpt-4.1-mini"   # Sentimen, Topik Naming, NER (cepat & hemat)
+MODEL_SMART = "gpt-4.1"       # Summary Komprehensif (mendalam & detail)
 
 # --- INPUT AREA ---
 container_input = st.container()
@@ -1075,6 +1242,7 @@ if run_analysis:
             st.session_state.topic_map = topic_map
             st.session_state.analysis_done = True
             st.session_state.summary_cache = None
+            st.session_state.tab_insights = {}
             st.rerun()
 
 
@@ -1156,6 +1324,42 @@ if st.session_state.analysis_done and st.session_state.data is not None:
                     st.session_state.summary_cache = summary
                     st.rerun()
 
+        # --- Additional AI Insights: Pola Linguistik & Kesimpulan ---
+        st.markdown("---")
+        st.markdown("#### 🔍 Ringkasan Tambahan")
+        st.caption("Generate ringkasan AI terfokus untuk aspek Pola Linguistik dan Kesimpulan Strategis.")
+
+        ling_col, konk_col = st.columns(2)
+
+        with ling_col:
+            # Pola Linguistik
+            all_w_t1 = " ".join(df['Teks_Clean']).split()
+            top_w_t1 = Counter(all_w_t1).most_common(15)
+            bigrams_t1 = get_ngrams(df['Teks_Clean'], n=2, top_k=10)
+            trigrams_t1 = get_ngrams(df['Teks_Clean'], n=3, top_k=5)
+            ctx_ling = f"""Kata Dominan: {", ".join([f"{w} ({c}x)" for w, c in top_w_t1])}
+Bigram Teratas: {", ".join([f"'{b[0]}' ({b[1]}x)" for b in bigrams_t1]) if bigrams_t1 else 'tidak cukup data'}
+Trigram Teratas: {", ".join([f"'{t[0]}' ({t[1]}x)" for t in trigrams_t1]) if trigrams_t1 else 'tidak cukup data'}
+Total Kata: {len(all_w_t1)} | Kata Unik: {len(set(all_w_t1))}
+Bahasa: {language} | Tipe Teks: {text_type}"""
+            render_tab_insight_ui(client, MODEL_SMART, "linguistik", ctx_ling, "Pola Linguistik")
+
+        with konk_col:
+            # Kesimpulan & Rekomendasi
+            total_t1 = len(df)
+            pos_t1 = round(sc.get('Positif', 0) / total_t1 * 100, 1) if total_t1 else 0
+            neg_t1 = round(sc.get('Negatif', 0) / total_t1 * 100, 1) if total_t1 else 0
+            topics_t1 = ", ".join([t['Topik'] for t in st.session_state.topic_details])
+            ner_t1 = st.session_state.ner_results or {}
+            ctx_konk = f"""RINGKASAN DATA:
+- Total Dokumen: {total_t1} | Topik: {df['Topik'].nunique()}
+- Sentimen: Positif {pos_t1}%, Negatif {neg_t1}%, Netral {round(sc.get('Netral',0)/total_t1*100,1) if total_t1 else 0}%
+- Topik: {topics_t1}
+- Entitas: Person={len(ner_t1.get('Person',[]))}, Org={len(ner_t1.get('Organization',[]))}, Loc={len(ner_t1.get('Location',[]))}
+- Kata Dominan: {", ".join([f"{w}" for w, c in top_w_t1[:10]])}
+- Tipe Teks: {text_type} | Bahasa: {language}"""
+            render_tab_insight_ui(client, MODEL_SMART, "kesimpulan", ctx_konk, "Kesimpulan & Rekomendasi Strategis")
+
     # ========================
     # TAB 2: SENTIMEN
     # ========================
@@ -1204,6 +1408,20 @@ if st.session_state.analysis_done and st.session_state.data is not None:
                 filtered.style.map(color_sentiment, subset=['Sentimen']),
                 use_container_width=True, height=500
             )
+
+        # Ringkasan AI - Sentimen
+        total = len(df)
+        pos_pct = round(sc.get('Positif', 0) / total * 100, 1) if total else 0
+        neg_pct = round(sc.get('Negatif', 0) / total * 100, 1) if total else 0
+        net_pct = round(sc.get('Netral', 0) / total * 100, 1) if total else 0
+        ctx_sentimen = f"""Total Dokumen: {total}
+Distribusi Sentimen:
+- Positif: {sc.get('Positif', 0)} dokumen ({pos_pct}%)
+- Negatif: {sc.get('Negatif', 0)} dokumen ({neg_pct}%)
+- Netral: {sc.get('Netral', 0)} dokumen ({net_pct}%)
+Sentimen Dominan: {max(sc, key=sc.get) if sc else '-'}
+Tipe Teks: {text_type} | Bahasa: {language}"""
+        render_tab_insight_ui(client, MODEL_SMART, "sentimen", ctx_sentimen, "Analisis Sentimen")
 
     # ========================
     # TAB 3: TOPIK
@@ -1315,6 +1533,13 @@ if st.session_state.analysis_done and st.session_state.data is not None:
                         else:
                             st.info(f"Tidak ada teks untuk **{t_name}**")
 
+        # Ringkasan AI - Topik
+        topics_str = "\n".join([f"  - Topik '{t['Topik']}': kata kunci [{t['Keywords']}], {t['Jumlah_Dokumen']} dokumen" for t in st.session_state.topic_details])
+        ctx_topik = f"""Total Dokumen: {len(df)} | Jumlah Topik: {df['Topik'].nunique()}
+Topik & Kata Kunci:
+{topics_str}"""
+        render_tab_insight_ui(client, MODEL_SMART, "topik", ctx_topik, "Analisis Tematik (Topik)")
+
     # ========================
     # TAB 4: CROSS ANALYSIS (NEW)
     # ========================
@@ -1365,6 +1590,15 @@ if st.session_state.analysis_done and st.session_state.data is not None:
         cross_display['% Negatif'] = (cross_display['Negatif'] / cross_display['Total'] * 100).round(1)
         st.dataframe(cross_display, use_container_width=True)
 
+        # Ringkasan AI - Cross Analysis
+        cross_data_lines = []
+        for topic in cross_display.index:
+            r = cross_display.loc[topic]
+            cross_data_lines.append(f"  - {topic}: Positif={r.get('Positif',0)}, Negatif={r.get('Negatif',0)}, Netral={r.get('Netral',0)}, Total={r.get('Total',0)}, %Positif={r.get('% Positif',0)}%, %Negatif={r.get('% Negatif',0)}%")
+        ctx_cross = f"""Cross-Tabulation Sentimen × Topik:
+{chr(10).join(cross_data_lines)}"""
+        render_tab_insight_ui(client, MODEL_SMART, "cross", ctx_cross, "Sentimen × Topik")
+
     # ========================
     # TAB 5: KATA KUNCI
     # ========================
@@ -1406,6 +1640,18 @@ if st.session_state.analysis_done and st.session_state.data is not None:
             fig_wf = px.bar(df_wf, x="Frekuensi", y="Kata", orientation='h', template=plotly_template)
             fig_wf.update_layout(yaxis={'categoryorder': 'total ascending'}, height=500)
             st.plotly_chart(fig_wf, use_container_width=True)
+
+        # Ringkasan AI - Kata Kunci
+        top_tfidf = [(word, round(sum_tfidf[0, idx], 3)) for word, idx in st.session_state.vectorizer.vocabulary_.items()]
+        top_tfidf = sorted(top_tfidf, key=lambda x: x[1], reverse=True)[:15]
+        tfidf_str = ", ".join([f"{w} ({s})" for w, s in top_tfidf])
+        all_w = txt_all.split() if txt_all.strip() else []
+        raw_top = Counter(all_w).most_common(15)
+        raw_str = ", ".join([f"{w} ({c}x)" for w, c in raw_top])
+        ctx_kk = f"""Top 15 Kata Kunci (TF-IDF): {tfidf_str}
+Top 15 Frekuensi Kata Mentah: {raw_str}
+Total Kata Unik: {len(set(all_w))} | Total Kata: {len(all_w)}"""
+        render_tab_insight_ui(client, MODEL_SMART, "katakunci", ctx_kk, "Analisis Kata Kunci")
 
     # ========================
     # TAB 6: N-GRAM
@@ -1461,6 +1707,18 @@ if st.session_state.analysis_done and st.session_state.data is not None:
                 st.plotly_chart(fig_fg, use_container_width=True)
             else:
                 st.info("Data tidak cukup untuk analisis Fourgram.")
+
+        # Ringkasan AI - N-Gram
+        bigrams_ctx = get_ngrams(df['Teks_Clean'], n=2, top_k=10)
+        trigrams_ctx = get_ngrams(df['Teks_Clean'], n=3, top_k=10)
+        fourgrams_ctx = get_ngrams(df['Teks_Clean'], n=4, top_k=5)
+        bi_str = ", ".join([f"'{b[0]}' ({b[1]}x)" for b in bigrams_ctx]) if bigrams_ctx else "tidak cukup data"
+        tri_str = ", ".join([f"'{t[0]}' ({t[1]}x)" for t in trigrams_ctx]) if trigrams_ctx else "tidak cukup data"
+        four_str = ", ".join([f"'{f[0]}' ({f[1]}x)" for f in fourgrams_ctx]) if fourgrams_ctx else "tidak cukup data"
+        ctx_ngram = f"""Bigram (2 kata) teratas: {bi_str}
+Trigram (3 kata) teratas: {tri_str}
+Fourgram (4 kata) teratas: {four_str}"""
+        render_tab_insight_ui(client, MODEL_SMART, "ngram", ctx_ngram, "Analisis N-Gram")
 
     # ========================
     # TAB 7: NER
@@ -1533,6 +1791,19 @@ if st.session_state.analysis_done and st.session_state.data is not None:
         else:
             st.error("Gagal memuat hasil NER.")
 
+        # Ringkasan AI - NER
+        if st.session_state.ner_results:
+            ner_r = st.session_state.ner_results
+            persons_ctx = ner_r.get('Person', [])
+            orgs_ctx = ner_r.get('Organization', [])
+            locs_ctx = ner_r.get('Location', [])
+            ctx_ner = f"""Entitas Terdeteksi:
+- Person ({len(persons_ctx)}): {', '.join(persons_ctx[:15]) if persons_ctx else 'tidak terdeteksi'}
+- Organization ({len(orgs_ctx)}): {', '.join(orgs_ctx[:15]) if orgs_ctx else 'tidak terdeteksi'}
+- Location ({len(locs_ctx)}): {', '.join(locs_ctx[:15]) if locs_ctx else 'tidak terdeteksi'}
+Total Entitas: {len(persons_ctx) + len(orgs_ctx) + len(locs_ctx)}"""
+            render_tab_insight_ui(client, MODEL_SMART, "ner", ctx_ner, "Analisis Entitas (NER)")
+
     # ========================
     # TAB 8: NETWORK
     # ========================
@@ -1555,6 +1826,16 @@ if st.session_state.analysis_done and st.session_state.data is not None:
                 plt.close()
         else:
             st.warning("Data topik belum tersedia.")
+
+        # Ringkasan AI - Network
+        if st.session_state.topic_details:
+            net_lines = []
+            for td in st.session_state.topic_details:
+                net_lines.append(f"  - {td['Topik']}: kata kunci [{td['Keywords']}]")
+            ctx_net = f"""Topik dalam jaringan ({len(st.session_state.topic_details)} topik):
+{chr(10).join(net_lines)}
+Setiap topik terhubung dengan kata kunci dominannya dalam graph."""
+            render_tab_insight_ui(client, MODEL_SMART, "network", ctx_net, "Text Network Analysis")
 
     # ========================
     # TAB 9: ENTITY NETWORK
@@ -1649,6 +1930,23 @@ if st.session_state.analysis_done and st.session_state.data is not None:
                     st.info("Tidak ada ko-kemunculan entitas yang terdeteksi dalam dokumen.")
         else:
             st.error("Hasil NER belum tersedia. Jalankan analisis terlebih dahulu.")
+
+        # Ringkasan AI - Entity Network
+        if st.session_state.ner_results:
+            ner_en = st.session_state.ner_results
+            G_ctx, emap_ctx = build_entity_cooccurrence(df['Teks_Asli'].tolist(), ner_en, client, MODEL_FAST)
+            if G_ctx and len(G_ctx.nodes()) > 0:
+                top_edges = sorted(G_ctx.edges(data=True), key=lambda x: x[2].get('weight', 0), reverse=True)[:10]
+                edges_str = ", ".join([f"{u}↔{v} ({d.get('weight',0)}x)" for u, v, d in top_edges])
+                cent_ctx = nx.degree_centrality(G_ctx)
+                top_cent = sorted(cent_ctx.items(), key=lambda x: x[1], reverse=True)[:5]
+                cent_str = ", ".join([f"{k} ({round(v,3)})" for k, v in top_cent])
+                ctx_ent_net = f"""Jaringan Entitas:
+- Total Node: {len(G_ctx.nodes())} | Total Edge: {len(G_ctx.edges())}
+- Kepadatan: {nx.density(G_ctx):.3f} | Komponen: {nx.number_connected_components(G_ctx)}
+- Top Pasangan Ko-kemunculan: {edges_str}
+- Top Entitas Sentral (Degree): {cent_str}"""
+                render_tab_insight_ui(client, MODEL_SMART, "entity_network", ctx_ent_net, "Jaringan Ko-kemunculan Entitas")
 
     # ========================
     # TAB 10: KATA KUNCI PER DOKUMEN
@@ -1871,6 +2169,33 @@ if st.session_state.analysis_done and st.session_state.data is not None:
                                 st.info(f"Dok #{d_idx + 1}: Tidak ada kata kunci.")
         else:
             st.warning("Data TF-IDF belum tersedia. Jalankan analisis terlebih dahulu.")
+
+        # Ringkasan AI - Kata Kunci per Dokumen
+        if hasattr(st.session_state, 'tfidf_matrix') and hasattr(st.session_state, 'vectorizer'):
+            tfidf_m = st.session_state.tfidf_matrix
+            fn = st.session_state.vectorizer.get_feature_names_out()
+            doc_kw_samples = []
+            sample_count = min(5, len(df))
+            for si in range(sample_count):
+                r = tfidf_m[si].toarray().flatten()
+                ti = r.argsort()[-5:][::-1]
+                kws = [fn[j] for j in ti if r[j] > 0]
+                wf_s = Counter(df['Teks_Clean'].iloc[si].split())
+                kw_detail = ", ".join([f"{w}(tfidf={round(r[list(fn).index(w)],3)}, freq={wf_s.get(w,0)})" for w in kws[:5]])
+                doc_kw_samples.append(f"  Dok#{si+1} [{df['Topik'].iloc[si]}|{df['Sentimen'].iloc[si]}]: {kw_detail}")
+            # Hitung variasi
+            all_top_kws = set()
+            for si in range(len(df)):
+                r = tfidf_m[si].toarray().flatten()
+                ti = r.argsort()[-5:][::-1]
+                for j in ti:
+                    if r[j] > 0:
+                        all_top_kws.add(fn[j])
+            ctx_dkw = f"""Total Dokumen: {len(df)}
+Kata Kunci Unik (top-5 per dok): {len(all_top_kws)}
+Sampel Dokumen:
+{chr(10).join(doc_kw_samples)}"""
+            render_tab_insight_ui(client, MODEL_SMART, "doc_keywords", ctx_dkw, "Kata Kunci per Dokumen")
 
     # ========================
     # EXPORT SECTION
