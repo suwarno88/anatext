@@ -17,7 +17,7 @@ from collections import Counter
 from itertools import combinations
 from datetime import datetime
 
-APP_VERSION = "2.3.0-enhanced"
+APP_VERSION = "2.3.1-enhanced"
 
 # ============================================================
 #                  KONFIGURASI HALAMAN
@@ -1655,12 +1655,17 @@ if st.session_state.analysis_done and st.session_state.data is not None:
     # ========================
     with t10:
         st.markdown("### 📊 10 Kata Kunci Teratas per Dokumen")
-        st.caption("Menampilkan 10 kata kunci dengan skor TF-IDF tertinggi di setiap dokumen.")
+        st.caption("Menampilkan 10 kata kunci dengan skor TF-IDF tertinggi beserta frekuensi kemunculan (Raw Count) di setiap dokumen.")
 
         if hasattr(st.session_state, 'tfidf_matrix') and hasattr(st.session_state, 'vectorizer'):
             tfidf_mat = st.session_state.tfidf_matrix
             feature_names = st.session_state.vectorizer.get_feature_names_out()
             total_docs = len(df)
+
+            # Helper: hitung frekuensi kata dalam satu dokumen
+            def get_word_freq_doc(doc_text):
+                words = doc_text.split()
+                return Counter(words)
 
             # --- Mode Pilihan ---
             doc_view_mode = st.radio(
@@ -1694,25 +1699,95 @@ if st.session_state.analysis_done and st.session_state.data is not None:
                     with st.expander("📖 Lihat Teks Lengkap", expanded=False):
                         st.write(df['Teks_Asli'].iloc[doc_idx])
 
-                    df_doc_kw = pd.DataFrame(top_words, columns=["Kata Kunci", "Skor TF-IDF"])
-                    fig_doc = px.bar(
-                        df_doc_kw, x="Skor TF-IDF", y="Kata Kunci", orientation='h',
-                        template=plotly_template, color="Skor TF-IDF",
-                        color_continuous_scale="Teal",
-                        text=df_doc_kw['Skor TF-IDF'].apply(lambda x: f"{x:.4f}")
-                    )
-                    fig_doc.update_traces(textposition='outside')
-                    fig_doc.update_layout(
-                        yaxis={'categoryorder': 'total ascending'},
-                        height=420,
-                        title=f"Top 10 Kata Kunci — Dokumen #{doc_idx + 1}"
-                    )
-                    st.plotly_chart(fig_doc, use_container_width=True)
+                    # Hitung frekuensi kata untuk dokumen ini
+                    word_freq = get_word_freq_doc(df['Teks_Clean'].iloc[doc_idx])
 
-                    # Tabel detail
-                    df_doc_kw.index = range(1, len(df_doc_kw) + 1)
-                    df_doc_kw.index.name = "Peringkat"
-                    st.dataframe(df_doc_kw, use_container_width=True)
+                    # Bangun dataframe gabungan
+                    combined_data = []
+                    for kata, skor in top_words:
+                        combined_data.append({
+                            "Kata Kunci": kata,
+                            "Skor TF-IDF": skor,
+                            "Frekuensi": word_freq.get(kata, 0)
+                        })
+                    df_doc_kw = pd.DataFrame(combined_data)
+
+                    # --- Dua chart berdampingan ---
+                    chart_left, chart_right = st.columns(2)
+
+                    with chart_left:
+                        fig_tfidf = px.bar(
+                            df_doc_kw, x="Skor TF-IDF", y="Kata Kunci", orientation='h',
+                            template=plotly_template, color="Skor TF-IDF",
+                            color_continuous_scale="Teal",
+                            text=df_doc_kw['Skor TF-IDF'].apply(lambda x: f"{x:.4f}")
+                        )
+                        fig_tfidf.update_traces(textposition='outside')
+                        fig_tfidf.update_layout(
+                            yaxis={'categoryorder': 'total ascending'},
+                            height=420,
+                            title=dict(text="Skor TF-IDF", font=dict(size=14)),
+                            coloraxis_showscale=False
+                        )
+                        st.plotly_chart(fig_tfidf, use_container_width=True)
+
+                    with chart_right:
+                        fig_freq = px.bar(
+                            df_doc_kw, x="Frekuensi", y="Kata Kunci", orientation='h',
+                            template=plotly_template, color="Frekuensi",
+                            color_continuous_scale="Purp",
+                            text="Frekuensi"
+                        )
+                        fig_freq.update_traces(textposition='outside')
+                        fig_freq.update_layout(
+                            yaxis={'categoryorder': 'total ascending'},
+                            height=420,
+                            title=dict(text="Frekuensi Kata (Raw Count)", font=dict(size=14)),
+                            coloraxis_showscale=False
+                        )
+                        st.plotly_chart(fig_freq, use_container_width=True)
+
+                    # --- Grouped Bar Chart gabungan ---
+                    st.markdown("##### 🔀 Perbandingan TF-IDF vs Frekuensi")
+                    # Normalisasi ke 0-1 agar bisa dibandingkan secara visual
+                    df_norm = df_doc_kw.copy()
+                    max_tfidf = df_norm['Skor TF-IDF'].max()
+                    max_freq = df_norm['Frekuensi'].max()
+                    df_norm['TF-IDF (Normalisasi)'] = df_norm['Skor TF-IDF'] / max_tfidf if max_tfidf > 0 else 0
+                    df_norm['Frekuensi (Normalisasi)'] = df_norm['Frekuensi'] / max_freq if max_freq > 0 else 0
+
+                    fig_combined = go.Figure()
+                    fig_combined.add_trace(go.Bar(
+                        y=df_norm['Kata Kunci'], x=df_norm['TF-IDF (Normalisasi)'],
+                        name='TF-IDF', orientation='h',
+                        marker_color='#4ECDC4',
+                        text=df_norm['Skor TF-IDF'].apply(lambda x: f"{x:.4f}"),
+                        textposition='outside'
+                    ))
+                    fig_combined.add_trace(go.Bar(
+                        y=df_norm['Kata Kunci'], x=df_norm['Frekuensi (Normalisasi)'],
+                        name='Frekuensi', orientation='h',
+                        marker_color='#BB8FCE',
+                        text=df_norm['Frekuensi'].astype(int).astype(str) + 'x',
+                        textposition='outside'
+                    ))
+                    fig_combined.update_layout(
+                        barmode='group',
+                        template=plotly_template,
+                        yaxis={'categoryorder': 'total ascending'},
+                        height=450,
+                        title=dict(text=f"TF-IDF vs Frekuensi — Dokumen #{doc_idx + 1}", font=dict(size=13)),
+                        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
+                        xaxis_title="Skor Normalisasi (0–1)"
+                    )
+                    st.plotly_chart(fig_combined, use_container_width=True)
+
+                    # Tabel detail gabungan
+                    st.markdown("##### 📋 Tabel Detail Kata Kunci")
+                    df_table = df_doc_kw.copy()
+                    df_table.index = range(1, len(df_table) + 1)
+                    df_table.index.name = "Peringkat"
+                    st.dataframe(df_table, use_container_width=True)
                 else:
                     st.warning("Dokumen ini tidak memiliki kata kunci yang terdeteksi setelah preprocessing.")
 
@@ -1744,33 +1819,52 @@ if st.session_state.analysis_done and st.session_state.data is not None:
                             top_kw = [(feature_names[j], round(row_data[j], 4)) for j in top_idx if row_data[j] > 0]
 
                             if top_kw:
+                                # Hitung frekuensi kata dokumen ini
+                                wf_doc = get_word_freq_doc(df['Teks_Clean'].iloc[d_idx])
                                 df_kw_grid = pd.DataFrame(top_kw, columns=["Kata", "TF-IDF"])
+                                df_kw_grid["Frekuensi"] = df_kw_grid["Kata"].apply(lambda k: wf_doc.get(k, 0))
 
-                                # Warna berdasarkan sentimen
                                 sent = df['Sentimen'].iloc[d_idx]
-                                bar_color = SENTIMENT_COLORS.get(sent, '#4facfe')
 
-                                fig_grid = px.bar(
-                                    df_kw_grid, x="TF-IDF", y="Kata", orientation='h',
-                                    template=plotly_template,
-                                    text=df_kw_grid['TF-IDF'].apply(lambda x: f"{x:.3f}")
-                                )
-                                fig_grid.update_traces(
+                                # Grouped bar: TF-IDF + Frekuensi (normalisasi)
+                                max_t = df_kw_grid['TF-IDF'].max()
+                                max_f = df_kw_grid['Frekuensi'].max()
+                                df_kw_grid['TF-IDF_norm'] = df_kw_grid['TF-IDF'] / max_t if max_t > 0 else 0
+                                df_kw_grid['Freq_norm'] = df_kw_grid['Frekuensi'] / max_f if max_f > 0 else 0
+
+                                fig_grid = go.Figure()
+                                fig_grid.add_trace(go.Bar(
+                                    y=df_kw_grid['Kata'], x=df_kw_grid['TF-IDF_norm'],
+                                    name='TF-IDF', orientation='h',
+                                    marker_color='#4ECDC4',
+                                    text=df_kw_grid['TF-IDF'].apply(lambda x: f"{x:.3f}"),
                                     textposition='outside',
-                                    marker_color=bar_color
-                                )
+                                    showlegend=(d_idx == 0)
+                                ))
+                                fig_grid.add_trace(go.Bar(
+                                    y=df_kw_grid['Kata'], x=df_kw_grid['Freq_norm'],
+                                    name='Frekuensi', orientation='h',
+                                    marker_color='#BB8FCE',
+                                    text=df_kw_grid['Frekuensi'].astype(int).astype(str) + 'x',
+                                    textposition='outside',
+                                    showlegend=(d_idx == 0)
+                                ))
 
                                 preview_t = df['Teks_Asli'].iloc[d_idx]
                                 preview_short_t = (preview_t[:50] + "...") if len(preview_t) > 50 else preview_t
 
                                 fig_grid.update_layout(
+                                    barmode='group',
+                                    template=plotly_template,
                                     yaxis={'categoryorder': 'total ascending'},
-                                    height=320,
+                                    height=360,
                                     title=dict(
                                         text=f"Dok #{d_idx + 1} [{sent}]<br><sub>{preview_short_t}</sub>",
                                         font=dict(size=11)
                                     ),
-                                    margin=dict(t=60, b=10, l=10, r=10)
+                                    margin=dict(t=60, b=10, l=10, r=10),
+                                    legend=dict(orientation='h', yanchor='bottom', y=1.08, xanchor='center', x=0.5, font=dict(size=9)),
+                                    xaxis_title=""
                                 )
                                 st.plotly_chart(fig_grid, use_container_width=True)
                             else:
