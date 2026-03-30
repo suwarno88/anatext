@@ -17,7 +17,7 @@ from collections import Counter
 from itertools import combinations
 from datetime import datetime
 
-APP_VERSION = "2.4.0-enhanced"
+APP_VERSION = "2.4.1-enhanced"
 
 # ============================================================
 #                  KONFIGURASI HALAMAN
@@ -423,7 +423,7 @@ def get_ngrams(text_series, n=2, top_k=10):
 
 # 4. NER Analysis (AI)
 def get_ner_ai(client, model, text_full):
-    """Mengekstrak Named Entities menggunakan GPT-4.1."""
+    """Mengekstrak Named Entities menggunakan GPT-4o."""
     try:
         text_sample = text_full[:15000]
         prompt = f"""
@@ -1087,7 +1087,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown(
-        f'<div class="footer-text">Developed by <b>Suwarno</b><br>Powered by <b>GPT-4.1</b> & <b>GPT-4.1-mini</b><br>v{APP_VERSION}</div>',
+        f'<div class="footer-text">Developed by <b>Suwarno</b><br>Powered by <b>GPT-4o</b> & <b>GPT-4o-mini</b><br>v{APP_VERSION}</div>',
         unsafe_allow_html=True
     )
 
@@ -1102,8 +1102,8 @@ try:
 except Exception:
     api_key = ""
 client = OpenAI(api_key=api_key) if api_key else None
-MODEL_FAST = "gpt-4.1-mini"   # Sentimen, Topik Naming, NER (cepat & hemat)
-MODEL_SMART = "gpt-4.1"       # Summary Komprehensif (mendalam & detail)
+MODEL_FAST = "gpt-4o-mini"   # Sentimen, Topik Naming, NER (cepat & hemat)
+MODEL_SMART = "gpt-4o"       # Summary Komprehensif (mendalam & detail)
 
 # --- INPUT AREA ---
 container_input = st.container()
@@ -1323,42 +1323,6 @@ if st.session_state.analysis_done and st.session_state.data is not None:
                     )
                     st.session_state.summary_cache = summary
                     st.rerun()
-
-        # --- Additional AI Insights: Pola Linguistik & Kesimpulan ---
-        st.markdown("---")
-        st.markdown("#### 🔍 Ringkasan Tambahan")
-        st.caption("Generate ringkasan AI terfokus untuk aspek Pola Linguistik dan Kesimpulan Strategis.")
-
-        ling_col, konk_col = st.columns(2)
-
-        with ling_col:
-            # Pola Linguistik
-            all_w_t1 = " ".join(df['Teks_Clean']).split()
-            top_w_t1 = Counter(all_w_t1).most_common(15)
-            bigrams_t1 = get_ngrams(df['Teks_Clean'], n=2, top_k=10)
-            trigrams_t1 = get_ngrams(df['Teks_Clean'], n=3, top_k=5)
-            ctx_ling = f"""Kata Dominan: {", ".join([f"{w} ({c}x)" for w, c in top_w_t1])}
-Bigram Teratas: {", ".join([f"'{b[0]}' ({b[1]}x)" for b in bigrams_t1]) if bigrams_t1 else 'tidak cukup data'}
-Trigram Teratas: {", ".join([f"'{t[0]}' ({t[1]}x)" for t in trigrams_t1]) if trigrams_t1 else 'tidak cukup data'}
-Total Kata: {len(all_w_t1)} | Kata Unik: {len(set(all_w_t1))}
-Bahasa: {language} | Tipe Teks: {text_type}"""
-            render_tab_insight_ui(client, MODEL_SMART, "linguistik", ctx_ling, "Pola Linguistik")
-
-        with konk_col:
-            # Kesimpulan & Rekomendasi
-            total_t1 = len(df)
-            pos_t1 = round(sc.get('Positif', 0) / total_t1 * 100, 1) if total_t1 else 0
-            neg_t1 = round(sc.get('Negatif', 0) / total_t1 * 100, 1) if total_t1 else 0
-            topics_t1 = ", ".join([t['Topik'] for t in st.session_state.topic_details])
-            ner_t1 = st.session_state.ner_results or {}
-            ctx_konk = f"""RINGKASAN DATA:
-- Total Dokumen: {total_t1} | Topik: {df['Topik'].nunique()}
-- Sentimen: Positif {pos_t1}%, Negatif {neg_t1}%, Netral {round(sc.get('Netral',0)/total_t1*100,1) if total_t1 else 0}%
-- Topik: {topics_t1}
-- Entitas: Person={len(ner_t1.get('Person',[]))}, Org={len(ner_t1.get('Organization',[]))}, Loc={len(ner_t1.get('Location',[]))}
-- Kata Dominan: {", ".join([f"{w}" for w, c in top_w_t1[:10]])}
-- Tipe Teks: {text_type} | Bahasa: {language}"""
-            render_tab_insight_ui(client, MODEL_SMART, "kesimpulan", ctx_konk, "Kesimpulan & Rekomendasi Strategis")
 
     # ========================
     # TAB 2: SENTIMEN
