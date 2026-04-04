@@ -1127,8 +1127,10 @@ if hasattr(st, "dialog"):
     @st.dialog("ℹ️ Informasi AnaText", width="large")
     def open_info_modal():
         show_app_info()
-        if st.button("Tutup", use_container_width=True):
-            st.rerun()
+        _, col_close, _ = st.columns([5, 2, 5])
+        with col_close:
+            if st.button("✕ Tutup", use_container_width=True):
+                st.rerun()
 else:
     def open_info_modal():
         pass
