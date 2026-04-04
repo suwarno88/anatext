@@ -1227,7 +1227,7 @@ with container_input:
                             txt = uploaded_file.read().decode('latin-1')
                         df_u = pd.DataFrame(txt.splitlines(), columns=['Teks'])
 
-                    cols = [c for c in df_u.columns if df_u[c].dtype == 'object']
+                    cols = [c for c in df_u.columns if pd.api.types.is_string_dtype(df_u[c]) or df_u[c].dtype == 'object']
                     if cols:
                         t_col = st.selectbox("Pilih Kolom Teks:", cols)
                         input_text_list = df_u[t_col].dropna().astype(str).tolist()
