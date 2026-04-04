@@ -17,7 +17,7 @@ from collections import Counter
 from itertools import combinations
 from datetime import datetime
 
-APP_VERSION = "2.4.1-enhanced"
+APP_VERSION = "2.5.0-enhanced"
 
 # ============================================================
 #                  KONFIGURASI HALAMAN
@@ -1055,6 +1055,85 @@ else:
 
 
 # ============================================================
+#              INFORMASI APLIKASI (DIALOG)
+# ============================================================
+def show_app_info():
+    """Menampilkan informasi lengkap tentang AnaText."""
+    st.markdown("""
+### 💡 Tentang AnaText
+
+**AnaText** adalah platform analisis teks berbasis kecerdasan buatan (AI) yang dikembangkan untuk membantu peneliti, analis data, dan praktisi dalam mengekstrak insight mendalam dari data teks secara otomatis. Platform ini mengintegrasikan pendekatan Natural Language Processing (NLP) tradisional dengan kemampuan Large Language Model (LLM) modern.
+
+---
+
+### 📋 Fitur Utama
+
+| No | Fitur | Deskripsi |
+|----|-------|-----------|
+| 1 | **Analisis Sentimen** | Klasifikasi sentimen otomatis (Positif/Negatif/Netral) menggunakan AI |
+| 2 | **Topic Modeling (Clustering)** | Pengelompokan dokumen ke dalam topik-topik menggunakan K-Means |
+| 3 | **Word Cloud per Topik** | Visualisasi kata dominan untuk setiap klaster topik |
+| 4 | **Cross-Analysis Sentimen × Topik** | Analisis silang distribusi sentimen di setiap topik |
+| 5 | **Analisis Kata Kunci** | Identifikasi kata kunci berdasarkan skor TF-IDF dan frekuensi |
+| 6 | **Analisis N-Gram** | Deteksi frasa berulang (Bigram, Trigram, Fourgram) |
+| 7 | **Named Entity Recognition (NER)** | Ekstraksi entitas (Person, Organization, Location) berbasis AI |
+| 8 | **Text Network Analysis** | Visualisasi jaringan hubungan topik dan kata kunci |
+| 9 | **Jaringan Ko-kemunculan Entitas** | Jaringan entitas yang muncul bersama dalam dokumen |
+| 10 | **Kata Kunci per Dokumen** | Top 10 kata kunci (TF-IDF & Raw Count) untuk setiap dokumen |
+| 11 | **Ringkasan AI per Tab** | AI-generated insight untuk setiap tab analisis |
+| 12 | **Laporan Eksekutif Komprehensif** | Laporan analisis terstruktur oleh AI |
+
+---
+
+### ⚙️ Algoritma & Teknologi
+
+| Komponen | Teknologi/Algoritma |
+|----------|---------------------|
+| Preprocessing Teks | Tokenisasi, Case Folding, Stop Words Removal, Stemming (Sastrawi) |
+| Representasi Fitur | TF-IDF (Term Frequency–Inverse Document Frequency) |
+| Clustering/Topik | K-Means Clustering |
+| Reduksi Dimensi | PCA (Principal Component Analysis) |
+| Sentimen & NER | OpenAI GPT-4.1 / GPT-4.1-mini |
+| Ringkasan AI | OpenAI GPT-4.1 (generatif) |
+| Analisis Frasa | CountVectorizer (N-Gram) |
+| Network Analysis | NetworkX (Graph Theory) |
+| Visualisasi | Plotly, Matplotlib, WordCloud |
+| Framework Web | Streamlit |
+| Bahasa yang Didukung | Indonesia (dengan Sastrawi) dan Inggris |
+
+---
+
+### 📖 Format Sitasi
+
+Jika Anda menggunakan AnaText dalam penelitian atau publikasi, silakan gunakan format sitasi berikut:
+
+**APA Style (7th Edition):**
+
+> Suwarno. (2026). *AnaText: Platform analisis teks berbasis kecerdasan buatan* (Versi 2.5.0) [Perangkat lunak]. https://anatext.streamlit.app/
+
+**IEEE Style:**
+
+> Suwarno, "AnaText: Platform Analisis Teks Berbasis Kecerdasan Buatan," versi 2.5.0, Jan. 2026. [Online]. Available: https://anatext.streamlit.app/
+
+---
+
+📌 **Pengembang:** Suwarno
+📅 **Rilis Pertama:** Januari 2026
+🌐 **Akses:** [https://anatext.streamlit.app/](https://anatext.streamlit.app/)
+""")
+
+
+if hasattr(st, "dialog"):
+    @st.dialog("ℹ️ Informasi AnaText", width="large")
+    def open_info_modal():
+        show_app_info()
+        st.button("Tutup", on_click=st.rerun)
+else:
+    def open_info_modal():
+        pass
+
+
+# ============================================================
 #                      SIDEBAR
 # ============================================================
 with st.sidebar:
@@ -1084,6 +1163,16 @@ with st.sidebar:
     else:
         with st.expander("📝 Kelola Stop Words"):
             show_stopwords_manager()
+
+    st.markdown("---")
+
+    # Tombol Informasi Aplikasi
+    if hasattr(st, "dialog"):
+        if st.button("ℹ️ Informasi AnaText", use_container_width=True):
+            open_info_modal()
+    else:
+        with st.expander("ℹ️ Informasi AnaText"):
+            show_app_info()
 
     st.markdown("---")
     st.markdown(
