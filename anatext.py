@@ -17,7 +17,7 @@ from collections import Counter
 from itertools import combinations
 from datetime import datetime
 
-APP_VERSION = "2.5.0-enhanced"
+APP_VERSION = "2.5.0"
 
 # ============================================================
 #                  KONFIGURASI HALAMAN
@@ -1062,7 +1062,7 @@ def show_app_info():
     st.markdown("""
 ### 💡 Tentang AnaText
 
-**AnaText** adalah platform analisis teks berbasis kecerdasan buatan (AI) yang dikembangkan untuk membantu peneliti, analis data, dan praktisi dalam mengekstrak insight mendalam dari data teks secara otomatis. Platform ini mengintegrasikan pendekatan Natural Language Processing (NLP) tradisional dengan kemampuan Large Language Model (LLM) modern.
+**AnaText** adalah platform analisis teks berbasis kecerdasan artifisial (AI) yang dikembangkan untuk membantu peneliti, analis data, dan praktisi dalam mengekstrak insight mendalam dari data teks secara otomatis. Platform ini mengintegrasikan pendekatan Natural Language Processing (NLP) tradisional dengan kemampuan Large Language Model (LLM) modern.
 
 ---
 
@@ -1109,11 +1109,11 @@ Jika Anda menggunakan AnaText dalam penelitian atau publikasi, silakan gunakan f
 
 **APA Style (7th Edition):**
 
-> Suwarno. (2026). *AnaText: Platform analisis teks berbasis kecerdasan buatan* (Versi 2.5.0) [Perangkat lunak]. https://anatext.streamlit.app/
+> Suwarno. (2026). *AnaText: Platform analisis teks berbasis kecerdasan artifisial* [Perangkat lunak]. https://anatext.streamlit.app/
 
 **IEEE Style:**
 
-> Suwarno, "AnaText: Platform Analisis Teks Berbasis Kecerdasan Buatan," versi 2.5.0, Jan. 2026. [Online]. Available: https://anatext.streamlit.app/
+> Suwarno, "AnaText: Platform Analisis Teks Berbasis Kecerdasan Artifisial," Jan. 2026. [Online]. Available: https://anatext.streamlit.app/
 
 ---
 
@@ -1127,7 +1127,8 @@ if hasattr(st, "dialog"):
     @st.dialog("ℹ️ Informasi AnaText", width="large")
     def open_info_modal():
         show_app_info()
-        st.button("Tutup", on_click=st.rerun)
+        if st.button("Tutup", use_container_width=True):
+            st.rerun()
 else:
     def open_info_modal():
         pass
