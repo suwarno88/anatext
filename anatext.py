@@ -1103,23 +1103,50 @@ def show_app_info():
 
 ---
 
+### 📜 Lisensi
+
+AnaText dilisensikan di bawah **Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International (CC BY-NC-ND 4.0)**.
+
+| Ketentuan | Penjelasan |
+|-----------|------------|
+| **BY (Attribution)** | Wajib mencantumkan sitasi/kredit kepada pengembang |
+| **NC (NonCommercial)** | Dilarang menggunakan untuk tujuan komersial |
+| **ND (NoDerivatives)** | Dilarang memodifikasi, mengadaptasi, atau membuat karya turunan |
+
+Anda bebas menggunakan AnaText untuk keperluan riset, pendidikan, dan non-komersial lainnya, selama mencantumkan sitasi yang sesuai.
+
+🔗 Detail lisensi: [https://creativecommons.org/licenses/by-nc-nd/4.0/](https://creativecommons.org/licenses/by-nc-nd/4.0/)
+
+---
+
 ### 📖 Format Sitasi
 
-Jika Anda menggunakan AnaText dalam penelitian atau publikasi, silakan gunakan format sitasi berikut:
+Jika Anda menggunakan AnaText dalam penelitian atau publikasi, silakan gunakan salah satu format sitasi berikut:
 
-**APA Style (7th Edition):**
+**APA:**
+> Suwarno. (2026). AnaText: Platform Analisis Teks Berbasis Kecerdasan Artifisial (2.5.0). Zenodo. https://doi.org/10.5281/zenodo.19413170
 
-> Suwarno. (2026). *AnaText: Platform analisis teks berbasis kecerdasan artifisial* [Perangkat lunak]. https://anatext.streamlit.app/
+**IEEE:**
+> Suwarno, "AnaText: Platform Analisis Teks Berbasis Kecerdasan Artifisial". Zenodo, Jan. 2026. doi: 10.5281/zenodo.19413170.
 
-**IEEE Style:**
+**Harvard:**
+> Suwarno (2026) "AnaText: Platform Analisis Teks Berbasis Kecerdasan Artifisial". Zenodo. doi:10.5281/zenodo.19413170.
 
-> Suwarno, "AnaText: Platform Analisis Teks Berbasis Kecerdasan Artifisial," Jan. 2026. [Online]. Available: https://anatext.streamlit.app/
+**MLA:**
+> Suwarno. Anatext: platform analisis teks berbasis kecerdasan artifisial. 2.5.0, Zenodo, Jan. 2026, https://doi.org/10.5281/zenodo.19413170.
+
+**Vancouver:**
+> Suwarno. AnaText: Platform Analisis Teks Berbasis Kecerdasan Artifisial. Zenodo; 2026.
+
+**Chicago:**
+> Suwarno. "Anatext: platform analisis teks berbasis kecerdasan artifisial". Zenodo, January 2026. https://doi.org/10.5281/zenodo.19413170.
 
 ---
 
 📌 **Pengembang:** Suwarno
 📅 **Rilis Pertama:** Januari 2026
 🌐 **Akses:** [https://anatext.streamlit.app/](https://anatext.streamlit.app/)
+🔗 **DOI:** [10.5281/zenodo.19413170](https://doi.org/10.5281/zenodo.19413170)
 """)
 
 
@@ -1127,7 +1154,7 @@ if hasattr(st, "dialog"):
     @st.dialog("ℹ️ Informasi AnaText", width="large")
     def open_info_modal():
         show_app_info()
-        _, col_close, _ = st.columns([5, 2, 5])
+        col_close, _ = st.columns([2, 10])
         with col_close:
             if st.button("✕ Tutup", use_container_width=True):
                 st.rerun()
