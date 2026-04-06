@@ -1151,7 +1151,7 @@ def show_app_info():
 | Clustering/Topik | K-Means Clustering |
 | Reduksi Dimensi | PCA (Principal Component Analysis) |
 | Sentimen & NER | OpenAI GPT-4.1 / GPT-4.1-mini |
-| POS Tagging | OpenAI GPT-4.1-mini (klasifikasi jenis kata) |
+| POS Tagging | OpenAI GPT-4.1 (klasifikasi jenis kata) |
 | Ringkasan AI | OpenAI GPT-4.1 (generatif) |
 | Analisis Frasa | CountVectorizer (N-Gram) |
 | Network Analysis | NetworkX (Graph Theory) |
@@ -2284,7 +2284,7 @@ Setiap topik terhubung dengan kata kunci dominannya dalam graph."""
                     else:
                         if st.button("🏷️ Analisis Jenis Kata (AI)", key=f"gen_pos_{doc_idx}", type="primary"):
                             with st.spinner("🤖 AI sedang mengklasifikasikan jenis kata..."):
-                                pos_result = get_pos_tags_ai(client, MODEL_FAST, df['Teks_Asli'].iloc[doc_idx])
+                                pos_result = get_pos_tags_ai(client, MODEL_SMART, df['Teks_Asli'].iloc[doc_idx])
                                 st.session_state.pos_cache[pos_key] = pos_result
                                 st.rerun()
                 else:
@@ -2407,7 +2407,7 @@ Setiap topik terhubung dengan kata kunci dominannya dalam graph."""
                     else:
                         if st.button("🏷️ Analisis Jenis Kata (AI)", key=f"gen_gpos_{grid_doc_idx}", type="primary"):
                             with st.spinner("🤖 AI sedang mengklasifikasikan jenis kata..."):
-                                gpos_result = get_pos_tags_ai(client, MODEL_FAST, df['Teks_Asli'].iloc[grid_doc_idx])
+                                gpos_result = get_pos_tags_ai(client, MODEL_SMART, df['Teks_Asli'].iloc[grid_doc_idx])
                                 st.session_state.pos_cache[grid_pos_key] = gpos_result
                                 st.rerun()
         else:
