@@ -86,6 +86,8 @@ if 'entity_network' not in st.session_state:
     st.session_state.entity_network = None
 if 'tab_insights' not in st.session_state:
     st.session_state.tab_insights = {}
+if 'pos_cache' not in st.session_state:
+    st.session_state.pos_cache = {}
 
 # ============================================================
 #                  CSS & THEME ENGINE
@@ -275,7 +277,7 @@ def render_elegant_header(mode):
         </p>
         <div style="margin-top: 10px;">
             <span style="background: {badge_bg}; color: {badge_text}; padding: 4px 14px; border-radius: 20px; font-size: 0.78rem; font-weight: 600;">
-                ✨ Sentiment · Clustering · NER · N-Gram · Network · Entity Network
+                ✨ Sentiment · Clustering · NER · N-Gram · Network · Entity Network · POS Tagging
             </span>
         </div>
     </div>
@@ -458,6 +460,60 @@ def get_ner_ai(client, model, text_full):
         return json.loads(response.choices[0].message.content)
     except Exception as e:
         return {"Person": [], "Organization": [], "Location": [], "Error": str(e)}
+
+
+# 4b. POS Tagging (AI) — Klasifikasi Kata Kerja, Kata Benda, Kata Sifat
+def get_pos_tags_ai(client, model, text):
+    """Mengklasifikasikan kata-kata dalam teks menjadi kata kerja, kata benda, dan kata sifat menggunakan AI."""
+    try:
+        truncated = text[:3000] if isinstance(text, str) else ""
+        if not truncated.strip():
+            return {"Kata Benda": [], "Kata Kerja": [], "Kata Sifat": []}
+
+        prompt = f"""Anda adalah ahli linguistik Bahasa Indonesia dan Inggris.
+Analisis teks berikut dan klasifikasikan kata-kata penting ke dalam 3 kategori:
+
+1. Kata Benda (Nomina) — kata yang merujuk pada orang, tempat, benda, atau konsep
+2. Kata Kerja (Verba) — kata yang menyatakan tindakan, proses, atau keadaan
+3. Kata Sifat (Adjektiva) — kata yang menjelaskan sifat, ciri, atau kualitas
+
+ATURAN:
+- Ambil maksimal 15 kata per kategori yang paling relevan dan sering muncul
+- Gunakan bentuk kata dasar (lemma) jika memungkinkan
+- Jangan sertakan stop words atau kata fungsi (preposisi, konjungsi, partikel)
+- Setiap kata hanya boleh muncul di SATU kategori
+- Output HARUS berupa JSON murni tanpa markdown
+
+TEKS:
+{truncated}
+
+Output format:
+{{"Kata Benda": ["kata1", "kata2"], "Kata Kerja": ["kata1", "kata2"], "Kata Sifat": ["kata1", "kata2"]}}
+"""
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "You are a linguistic expert. Output only valid JSON without markdown."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0,
+            response_format={"type": "json_object"},
+            max_tokens=1000
+        )
+        result = json.loads(response.choices[0].message.content)
+        # Normalisasi key
+        normalized = {"Kata Benda": [], "Kata Kerja": [], "Kata Sifat": []}
+        for key, val in result.items():
+            key_lower = key.lower()
+            if "benda" in key_lower or "noun" in key_lower or "nomina" in key_lower:
+                normalized["Kata Benda"] = val[:15] if isinstance(val, list) else []
+            elif "kerja" in key_lower or "verb" in key_lower or "verba" in key_lower:
+                normalized["Kata Kerja"] = val[:15] if isinstance(val, list) else []
+            elif "sifat" in key_lower or "adjective" in key_lower or "adjektiva" in key_lower:
+                normalized["Kata Sifat"] = val[:15] if isinstance(val, list) else []
+        return normalized
+    except Exception as e:
+        return {"Kata Benda": [], "Kata Kerja": [], "Kata Sifat": [], "Error": str(e)}
 
 
 # 5. Comprehensive AI Summary (ENHANCED)
@@ -1080,8 +1136,9 @@ def show_app_info():
 | 8 | **Text Network Analysis** | Visualisasi jaringan hubungan topik dan kata kunci |
 | 9 | **Jaringan Ko-kemunculan Entitas** | Jaringan entitas yang muncul bersama dalam dokumen |
 | 10 | **Kata Kunci per Dokumen** | Top 10 kata kunci (TF-IDF & Raw Count) untuk setiap dokumen |
-| 11 | **Ringkasan AI per Tab** | AI-generated insight untuk setiap tab analisis |
-| 12 | **Laporan Eksekutif Komprehensif** | Laporan analisis terstruktur oleh AI |
+| 11 | **Klasifikasi Jenis Kata (POS)** | Identifikasi kata benda, kata kerja, dan kata sifat per dokumen menggunakan AI |
+| 12 | **Ringkasan AI per Tab** | AI-generated insight untuk setiap tab analisis |
+| 13 | **Laporan Eksekutif Komprehensif** | Laporan analisis terstruktur oleh AI |
 
 ---
 
@@ -1094,6 +1151,7 @@ def show_app_info():
 | Clustering/Topik | K-Means Clustering |
 | Reduksi Dimensi | PCA (Principal Component Analysis) |
 | Sentimen & NER | OpenAI GPT-4.1 / GPT-4.1-mini |
+| POS Tagging | OpenAI GPT-4.1-mini (klasifikasi jenis kata) |
 | Ringkasan AI | OpenAI GPT-4.1 (generatif) |
 | Analisis Frasa | CountVectorizer (N-Gram) |
 | Network Analysis | NetworkX (Graph Theory) |
@@ -1362,6 +1420,7 @@ if run_analysis:
             st.session_state.analysis_done = True
             st.session_state.summary_cache = None
             st.session_state.tab_insights = {}
+            st.session_state.pos_cache = {}
             st.rerun()
 
 
@@ -2169,6 +2228,65 @@ Setiap topik terhubung dengan kata kunci dominannya dalam graph."""
                     df_table.index = range(1, len(df_table) + 1)
                     df_table.index.name = "Peringkat"
                     st.dataframe(df_table, use_container_width=True)
+
+                    # --- Klasifikasi Jenis Kata (POS Tagging AI) ---
+                    st.markdown("---")
+                    st.markdown("##### 🏷️ Klasifikasi Jenis Kata (AI POS Tagging)")
+                    st.caption("Mengidentifikasi kata benda, kata kerja, dan kata sifat dalam dokumen menggunakan AI.")
+
+                    pos_key = f"pos_doc_{doc_idx}"
+                    if pos_key in st.session_state.pos_cache:
+                        pos_result = st.session_state.pos_cache[pos_key]
+                        # Render tabel POS
+                        nouns = pos_result.get("Kata Benda", [])
+                        verbs = pos_result.get("Kata Kerja", [])
+                        adjs = pos_result.get("Kata Sifat", [])
+                        max_len = max(len(nouns), len(verbs), len(adjs), 1)
+                        # Padukan panjang agar tabel seragam
+                        nouns_padded = nouns + [""] * (max_len - len(nouns))
+                        verbs_padded = verbs + [""] * (max_len - len(verbs))
+                        adjs_padded = adjs + [""] * (max_len - len(adjs))
+                        df_pos = pd.DataFrame({
+                            "Kata Benda (Nomina)": nouns_padded,
+                            "Kata Kerja (Verba)": verbs_padded,
+                            "Kata Sifat (Adjektiva)": adjs_padded
+                        })
+                        df_pos.index = range(1, len(df_pos) + 1)
+                        df_pos.index.name = "No"
+
+                        pos_c1, pos_c2, pos_c3 = st.columns(3)
+                        with pos_c1:
+                            st.metric("📦 Kata Benda", len(nouns))
+                        with pos_c2:
+                            st.metric("⚡ Kata Kerja", len(verbs))
+                        with pos_c3:
+                            st.metric("🎨 Kata Sifat", len(adjs))
+
+                        st.dataframe(df_pos, use_container_width=True, height=min(400, max_len * 38 + 50))
+
+                        # Visualisasi distribusi
+                        fig_pos = px.bar(
+                            x=["Kata Benda", "Kata Kerja", "Kata Sifat"],
+                            y=[len(nouns), len(verbs), len(adjs)],
+                            color=["Kata Benda", "Kata Kerja", "Kata Sifat"],
+                            color_discrete_map={"Kata Benda": "#45B7D1", "Kata Kerja": "#4ECDC4", "Kata Sifat": "#FFA07A"},
+                            template=plotly_template,
+                            labels={"x": "Jenis Kata", "y": "Jumlah"},
+                            text=[len(nouns), len(verbs), len(adjs)]
+                        )
+                        fig_pos.update_traces(textposition='outside')
+                        fig_pos.update_layout(showlegend=False, height=300, title=dict(text=f"Distribusi Jenis Kata — Dokumen #{doc_idx + 1}", font=dict(size=13)))
+                        st.plotly_chart(fig_pos, use_container_width=True)
+
+                        if st.button("🔄 Regenerasi Klasifikasi", key=f"regen_pos_{doc_idx}"):
+                            del st.session_state.pos_cache[pos_key]
+                            st.rerun()
+                    else:
+                        if st.button("🏷️ Analisis Jenis Kata (AI)", key=f"gen_pos_{doc_idx}", type="primary"):
+                            with st.spinner("🤖 AI sedang mengklasifikasikan jenis kata..."):
+                                pos_result = get_pos_tags_ai(client, MODEL_FAST, df['Teks_Asli'].iloc[doc_idx])
+                                st.session_state.pos_cache[pos_key] = pos_result
+                                st.rerun()
                 else:
                     st.warning("Dokumen ini tidak memiliki kata kunci yang terdeteksi setelah preprocessing.")
 
@@ -2250,6 +2368,48 @@ Setiap topik terhubung dengan kata kunci dominannya dalam graph."""
                                 st.plotly_chart(fig_grid, use_container_width=True)
                             else:
                                 st.info(f"Dok #{d_idx + 1}: Tidak ada kata kunci.")
+
+                # --- Batch POS Tagging untuk Grid Mode ---
+                st.markdown("---")
+                with st.expander("🏷️ Klasifikasi Jenis Kata per Dokumen (AI POS Tagging)", expanded=False):
+                    st.caption("Pilih dokumen untuk menganalisis jenis kata (kata benda, kata kerja, kata sifat).")
+                    grid_doc_options = [f"Dokumen {i + 1}" for i in range(display_count)]
+                    selected_grid_doc = st.selectbox("Pilih dokumen:", grid_doc_options, key="grid_pos_select")
+                    grid_doc_idx = grid_doc_options.index(selected_grid_doc)
+
+                    grid_pos_key = f"pos_doc_{grid_doc_idx}"
+                    if grid_pos_key in st.session_state.pos_cache:
+                        gpos = st.session_state.pos_cache[grid_pos_key]
+                        g_nouns = gpos.get("Kata Benda", [])
+                        g_verbs = gpos.get("Kata Kerja", [])
+                        g_adjs = gpos.get("Kata Sifat", [])
+                        g_max = max(len(g_nouns), len(g_verbs), len(g_adjs), 1)
+                        df_gpos = pd.DataFrame({
+                            "Kata Benda (Nomina)": g_nouns + [""] * (g_max - len(g_nouns)),
+                            "Kata Kerja (Verba)": g_verbs + [""] * (g_max - len(g_verbs)),
+                            "Kata Sifat (Adjektiva)": g_adjs + [""] * (g_max - len(g_adjs))
+                        })
+                        df_gpos.index = range(1, len(df_gpos) + 1)
+                        df_gpos.index.name = "No"
+
+                        gp1, gp2, gp3 = st.columns(3)
+                        with gp1:
+                            st.metric("📦 Kata Benda", len(g_nouns))
+                        with gp2:
+                            st.metric("⚡ Kata Kerja", len(g_verbs))
+                        with gp3:
+                            st.metric("🎨 Kata Sifat", len(g_adjs))
+                        st.dataframe(df_gpos, use_container_width=True)
+
+                        if st.button("🔄 Regenerasi", key=f"regen_gpos_{grid_doc_idx}"):
+                            del st.session_state.pos_cache[grid_pos_key]
+                            st.rerun()
+                    else:
+                        if st.button("🏷️ Analisis Jenis Kata (AI)", key=f"gen_gpos_{grid_doc_idx}", type="primary"):
+                            with st.spinner("🤖 AI sedang mengklasifikasikan jenis kata..."):
+                                gpos_result = get_pos_tags_ai(client, MODEL_FAST, df['Teks_Asli'].iloc[grid_doc_idx])
+                                st.session_state.pos_cache[grid_pos_key] = gpos_result
+                                st.rerun()
         else:
             st.warning("Data TF-IDF belum tersedia. Jalankan analisis terlebih dahulu.")
 
