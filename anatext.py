@@ -17,7 +17,7 @@ from collections import Counter
 from itertools import combinations
 from datetime import datetime
 
-APP_VERSION = "2.6.0"
+APP_VERSION = "2.5.0"
 
 # ============================================================
 #                  KONFIGURASI HALAMAN
