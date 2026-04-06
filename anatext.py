@@ -17,7 +17,7 @@ from collections import Counter
 from itertools import combinations
 from datetime import datetime
 
-APP_VERSION = "2.5.0"
+APP_VERSION = "2.6.0"
 
 # ============================================================
 #                  KONFIGURASI HALAMAN
@@ -463,14 +463,43 @@ def get_ner_ai(client, model, text_full):
 
 
 # 4b. POS Tagging (AI) — Klasifikasi Kata Kerja, Kata Benda, Kata Sifat
-def get_pos_tags_ai(client, model, text):
+def get_pos_tags_ai(client, model, text, language="Indonesia"):
     """Mengklasifikasikan kata-kata dalam teks menjadi kata kerja, kata benda, dan kata sifat menggunakan AI."""
     try:
         truncated = text[:3000] if isinstance(text, str) else ""
-        if not truncated.strip():
-            return {"Kata Benda": [], "Kata Kerja": [], "Kata Sifat": []}
+        is_en = language == "Inggris"
 
-        prompt = f"""Anda adalah ahli linguistik Bahasa Indonesia dan Inggris.
+        # Label sesuai bahasa
+        lbl_noun = "Nouns" if is_en else "Kata Benda"
+        lbl_verb = "Verbs" if is_en else "Kata Kerja"
+        lbl_adj = "Adjectives" if is_en else "Kata Sifat"
+
+        if not truncated.strip():
+            return {lbl_noun: [], lbl_verb: [], lbl_adj: []}
+
+        if is_en:
+            prompt = f"""You are an expert linguist in English.
+Analyze the following text and classify the important words into 3 categories:
+
+1. Nouns — words referring to people, places, things, or concepts
+2. Verbs — words expressing actions, processes, or states
+3. Adjectives — words describing qualities, characteristics, or properties
+
+RULES:
+- Extract up to 15 most relevant and frequent words per category
+- Use base form (lemma) when possible
+- Do NOT include stop words or function words (prepositions, conjunctions, particles)
+- Each word must appear in ONLY ONE category
+- Output MUST be pure JSON without markdown
+
+TEXT:
+{truncated}
+
+Output format:
+{{"Nouns": ["word1", "word2"], "Verbs": ["word1", "word2"], "Adjectives": ["word1", "word2"]}}
+"""
+        else:
+            prompt = f"""Anda adalah ahli linguistik Bahasa Indonesia.
 Analisis teks berikut dan klasifikasikan kata-kata penting ke dalam 3 kategori:
 
 1. Kata Benda (Nomina) — kata yang merujuk pada orang, tempat, benda, atau konsep
@@ -501,19 +530,19 @@ Output format:
             max_tokens=1000
         )
         result = json.loads(response.choices[0].message.content)
-        # Normalisasi key
-        normalized = {"Kata Benda": [], "Kata Kerja": [], "Kata Sifat": []}
+        # Normalisasi key ke label sesuai bahasa
+        normalized = {lbl_noun: [], lbl_verb: [], lbl_adj: []}
         for key, val in result.items():
             key_lower = key.lower()
             if "benda" in key_lower or "noun" in key_lower or "nomina" in key_lower:
-                normalized["Kata Benda"] = val[:15] if isinstance(val, list) else []
+                normalized[lbl_noun] = val[:15] if isinstance(val, list) else []
             elif "kerja" in key_lower or "verb" in key_lower or "verba" in key_lower:
-                normalized["Kata Kerja"] = val[:15] if isinstance(val, list) else []
+                normalized[lbl_verb] = val[:15] if isinstance(val, list) else []
             elif "sifat" in key_lower or "adjective" in key_lower or "adjektiva" in key_lower:
-                normalized["Kata Sifat"] = val[:15] if isinstance(val, list) else []
+                normalized[lbl_adj] = val[:15] if isinstance(val, list) else []
         return normalized
     except Exception as e:
-        return {"Kata Benda": [], "Kata Kerja": [], "Kata Sifat": [], "Error": str(e)}
+        return {lbl_noun: [], lbl_verb: [], lbl_adj: [], "Error": str(e)}
 
 
 # 5. Comprehensive AI Summary (ENHANCED)
@@ -1151,7 +1180,7 @@ def show_app_info():
 | Clustering/Topik | K-Means Clustering |
 | Reduksi Dimensi | PCA (Principal Component Analysis) |
 | Sentimen & NER | OpenAI GPT-4.1 / GPT-4.1-mini |
-| POS Tagging | OpenAI GPT-4.1 (klasifikasi jenis kata) |
+| POS Tagging | OpenAI GPT-4.1-mini (klasifikasi jenis kata) |
 | Ringkasan AI | OpenAI GPT-4.1 (generatif) |
 | Analisis Frasa | CountVectorizer (N-Gram) |
 | Network Analysis | NetworkX (Graph Theory) |
@@ -2234,48 +2263,56 @@ Setiap topik terhubung dengan kata kunci dominannya dalam graph."""
                     st.markdown("##### 🏷️ Klasifikasi Jenis Kata (AI POS Tagging)")
                     st.caption("Mengidentifikasi kata benda, kata kerja, dan kata sifat dalam dokumen menggunakan AI.")
 
+                    is_en = language == "Inggris"
+                    lbl_n = "Nouns" if is_en else "Kata Benda"
+                    lbl_v = "Verbs" if is_en else "Kata Kerja"
+                    lbl_a = "Adjectives" if is_en else "Kata Sifat"
+                    col_n = f"{'Nouns' if is_en else 'Kata Benda (Nomina)'}"
+                    col_v = f"{'Verbs' if is_en else 'Kata Kerja (Verba)'}"
+                    col_a = f"{'Adjectives' if is_en else 'Kata Sifat (Adjektiva)'}"
+
                     pos_key = f"pos_doc_{doc_idx}"
                     if pos_key in st.session_state.pos_cache:
                         pos_result = st.session_state.pos_cache[pos_key]
                         # Render tabel POS
-                        nouns = pos_result.get("Kata Benda", [])
-                        verbs = pos_result.get("Kata Kerja", [])
-                        adjs = pos_result.get("Kata Sifat", [])
+                        nouns = pos_result.get(lbl_n, [])
+                        verbs = pos_result.get(lbl_v, [])
+                        adjs = pos_result.get(lbl_a, [])
                         max_len = max(len(nouns), len(verbs), len(adjs), 1)
                         # Padukan panjang agar tabel seragam
                         nouns_padded = nouns + [""] * (max_len - len(nouns))
                         verbs_padded = verbs + [""] * (max_len - len(verbs))
                         adjs_padded = adjs + [""] * (max_len - len(adjs))
                         df_pos = pd.DataFrame({
-                            "Kata Benda (Nomina)": nouns_padded,
-                            "Kata Kerja (Verba)": verbs_padded,
-                            "Kata Sifat (Adjektiva)": adjs_padded
+                            col_n: nouns_padded,
+                            col_v: verbs_padded,
+                            col_a: adjs_padded
                         })
                         df_pos.index = range(1, len(df_pos) + 1)
                         df_pos.index.name = "No"
 
                         pos_c1, pos_c2, pos_c3 = st.columns(3)
                         with pos_c1:
-                            st.metric("📦 Kata Benda", len(nouns))
+                            st.metric(f"📦 {lbl_n}", len(nouns))
                         with pos_c2:
-                            st.metric("⚡ Kata Kerja", len(verbs))
+                            st.metric(f"⚡ {lbl_v}", len(verbs))
                         with pos_c3:
-                            st.metric("🎨 Kata Sifat", len(adjs))
+                            st.metric(f"🎨 {lbl_a}", len(adjs))
 
                         st.dataframe(df_pos, use_container_width=True, height=min(400, max_len * 38 + 50))
 
                         # Visualisasi distribusi
                         fig_pos = px.bar(
-                            x=["Kata Benda", "Kata Kerja", "Kata Sifat"],
+                            x=[lbl_n, lbl_v, lbl_a],
                             y=[len(nouns), len(verbs), len(adjs)],
-                            color=["Kata Benda", "Kata Kerja", "Kata Sifat"],
-                            color_discrete_map={"Kata Benda": "#45B7D1", "Kata Kerja": "#4ECDC4", "Kata Sifat": "#FFA07A"},
+                            color=[lbl_n, lbl_v, lbl_a],
+                            color_discrete_map={lbl_n: "#45B7D1", lbl_v: "#4ECDC4", lbl_a: "#FFA07A"},
                             template=plotly_template,
-                            labels={"x": "Jenis Kata", "y": "Jumlah"},
+                            labels={"x": "Word Type" if is_en else "Jenis Kata", "y": "Count" if is_en else "Jumlah"},
                             text=[len(nouns), len(verbs), len(adjs)]
                         )
                         fig_pos.update_traces(textposition='outside')
-                        fig_pos.update_layout(showlegend=False, height=300, title=dict(text=f"Distribusi Jenis Kata — Dokumen #{doc_idx + 1}", font=dict(size=13)))
+                        fig_pos.update_layout(showlegend=False, height=300, title=dict(text=f"{'Word Type Distribution' if is_en else 'Distribusi Jenis Kata'} — {'Document' if is_en else 'Dokumen'} #{doc_idx + 1}", font=dict(size=13)))
                         st.plotly_chart(fig_pos, use_container_width=True)
 
                         if st.button("🔄 Regenerasi Klasifikasi", key=f"regen_pos_{doc_idx}"):
@@ -2284,7 +2321,7 @@ Setiap topik terhubung dengan kata kunci dominannya dalam graph."""
                     else:
                         if st.button("🏷️ Analisis Jenis Kata (AI)", key=f"gen_pos_{doc_idx}", type="primary"):
                             with st.spinner("🤖 AI sedang mengklasifikasikan jenis kata..."):
-                                pos_result = get_pos_tags_ai(client, MODEL_SMART, df['Teks_Asli'].iloc[doc_idx])
+                                pos_result = get_pos_tags_ai(client, MODEL_FAST, df['Teks_Asli'].iloc[doc_idx], language)
                                 st.session_state.pos_cache[pos_key] = pos_result
                                 st.rerun()
                 else:
@@ -2377,28 +2414,36 @@ Setiap topik terhubung dengan kata kunci dominannya dalam graph."""
                     selected_grid_doc = st.selectbox("Pilih dokumen:", grid_doc_options, key="grid_pos_select")
                     grid_doc_idx = grid_doc_options.index(selected_grid_doc)
 
+                    g_is_en = language == "Inggris"
+                    g_lbl_n = "Nouns" if g_is_en else "Kata Benda"
+                    g_lbl_v = "Verbs" if g_is_en else "Kata Kerja"
+                    g_lbl_a = "Adjectives" if g_is_en else "Kata Sifat"
+                    g_col_n = "Nouns" if g_is_en else "Kata Benda (Nomina)"
+                    g_col_v = "Verbs" if g_is_en else "Kata Kerja (Verba)"
+                    g_col_a = "Adjectives" if g_is_en else "Kata Sifat (Adjektiva)"
+
                     grid_pos_key = f"pos_doc_{grid_doc_idx}"
                     if grid_pos_key in st.session_state.pos_cache:
                         gpos = st.session_state.pos_cache[grid_pos_key]
-                        g_nouns = gpos.get("Kata Benda", [])
-                        g_verbs = gpos.get("Kata Kerja", [])
-                        g_adjs = gpos.get("Kata Sifat", [])
+                        g_nouns = gpos.get(g_lbl_n, [])
+                        g_verbs = gpos.get(g_lbl_v, [])
+                        g_adjs = gpos.get(g_lbl_a, [])
                         g_max = max(len(g_nouns), len(g_verbs), len(g_adjs), 1)
                         df_gpos = pd.DataFrame({
-                            "Kata Benda (Nomina)": g_nouns + [""] * (g_max - len(g_nouns)),
-                            "Kata Kerja (Verba)": g_verbs + [""] * (g_max - len(g_verbs)),
-                            "Kata Sifat (Adjektiva)": g_adjs + [""] * (g_max - len(g_adjs))
+                            g_col_n: g_nouns + [""] * (g_max - len(g_nouns)),
+                            g_col_v: g_verbs + [""] * (g_max - len(g_verbs)),
+                            g_col_a: g_adjs + [""] * (g_max - len(g_adjs))
                         })
                         df_gpos.index = range(1, len(df_gpos) + 1)
                         df_gpos.index.name = "No"
 
                         gp1, gp2, gp3 = st.columns(3)
                         with gp1:
-                            st.metric("📦 Kata Benda", len(g_nouns))
+                            st.metric(f"📦 {g_lbl_n}", len(g_nouns))
                         with gp2:
-                            st.metric("⚡ Kata Kerja", len(g_verbs))
+                            st.metric(f"⚡ {g_lbl_v}", len(g_verbs))
                         with gp3:
-                            st.metric("🎨 Kata Sifat", len(g_adjs))
+                            st.metric(f"🎨 {g_lbl_a}", len(g_adjs))
                         st.dataframe(df_gpos, use_container_width=True)
 
                         if st.button("🔄 Regenerasi", key=f"regen_gpos_{grid_doc_idx}"):
@@ -2407,7 +2452,7 @@ Setiap topik terhubung dengan kata kunci dominannya dalam graph."""
                     else:
                         if st.button("🏷️ Analisis Jenis Kata (AI)", key=f"gen_gpos_{grid_doc_idx}", type="primary"):
                             with st.spinner("🤖 AI sedang mengklasifikasikan jenis kata..."):
-                                gpos_result = get_pos_tags_ai(client, MODEL_SMART, df['Teks_Asli'].iloc[grid_doc_idx])
+                                gpos_result = get_pos_tags_ai(client, MODEL_FAST, df['Teks_Asli'].iloc[grid_doc_idx], language)
                                 st.session_state.pos_cache[grid_pos_key] = gpos_result
                                 st.rerun()
         else:
